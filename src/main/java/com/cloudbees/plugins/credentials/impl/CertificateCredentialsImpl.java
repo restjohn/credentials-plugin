@@ -69,6 +69,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.HttpResponse;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
+import org.kohsuke.stapler.StaplerResponse;
 
 public class CertificateCredentialsImpl extends BaseStandardCredentials implements StandardCertificateCredentials {
 
@@ -643,95 +644,24 @@ public class CertificateCredentialsImpl extends BaseStandardCredentials implemen
                 return validateCertificateKeystore("PKCS12", toByteArray(Secret.fromString(value)), password);
             }
 
-            /**
-             * Creates a new {@link Upload} for the specified {@literal <input id="..."/>}
-             *
-             * @param divId the id if the form input element to inject the uploaded content into.
-             * @return the {@link Upload}
-             */
-            @SuppressWarnings("unused") // invoked by stapler binding
+            @SuppressWarnings("unused")
             @Restricted(NoExternalUse.class)
-            public Upload getUpload(String divId) {
-                return new Upload(divId, null);
-            }
-
-        }
-
-        /**
-         * Stapler binding object to handle a pop-up window for file upload.
-         */
-        public static class Upload {
-
-            /**
-             * The id of the {@literal <input>} element on the {@code window.opener} of the pop-up to inject the
-             * uploaded content into.
-             */
-            @NonNull
-            private final String divId;
-
-            /**
-             * The uploaded content.
-             */
-            @CheckForNull
-            private final Secret uploadedKeystore;
-
-            /**
-             * Our constructor.
-             *
-             * @param divId            id of the {@literal <input>} element on the {@code window.opener} of the
-             *                         pop-up to inject the uploaded content into.
-             * @param uploadedKeystore the content.
-             */
-            public Upload(@NonNull String divId, @CheckForNull Secret uploadedKeystore) {
-                this.divId = divId;
-                this.uploadedKeystore = uploadedKeystore;
-            }
-
-            /**
-             * Gets the id of the {@literal <input>} element on the {@code window.opener} of the pop-up to inject the
-             * uploaded content into.
-             *
-             * @return the id of the {@literal <input>} element on the {@code window.opener} of the pop-up to inject the
-             * uploaded content into.
-             */
-            @NonNull
-            public String getDivId() {
-                return divId;
-            }
-
-            /**
-             * Returns the content.
-             *
-             * @return the content.
-             */
-            @SuppressWarnings("unused") // used by Jelly EL
-            public Secret getUploadedKeystore() {
-                return uploadedKeystore;
-            }
-
-            /**
-             * Performs the actual upload.
-             *
-             * @param req the request.
-             * @return the response.
-             * @throws ServletException if something goes wrong.
-             * @throws IOException      if something goes wrong.
-             */
-            @NonNull
             public HttpResponse doUpload(@NonNull StaplerRequest req) throws ServletException, IOException {
                 FileItem file = req.getFileItem("certificate.file");
                 if (file == null) {
                     throw new ServletException("no file upload");
                 }
-                // Here is the trick, if we have a successful upload we replace ourselves in the stapler view
-                // with an instance that has the uploaded content and request stapler to render the "complete"
-                // view for that instance. The "complete" view can then do the injection and close itself so that
-                // the user experience is the pop-up then click upload and finally we inject back in the content to
-                // the form.
-                return HttpResponses.forwardToView(
-                        new Upload(getDivId(), UploadedKeyStoreSource.DescriptorImpl.toSecret(file.get())), "complete");
+                final Secret responseContent = UploadedKeyStoreSource.DescriptorImpl.toSecret(file.get());
+                return new HttpResponse() {
+                    public void generateResponse(StaplerRequest req, StaplerResponse rsp, Object node) throws IOException, ServletException {
+                        rsp.setContentType("text/plain;charset=UTF-8");
+                        rsp.getWriter().print(responseContent.getPlainText());
+                    }
+                };
             }
+
         }
+
     }
 
     /**
